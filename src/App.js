@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 
 function completeHost(hostname) {
@@ -73,30 +73,35 @@ const normalized = normalizeUrl(url);
 const valid = url.trim() === "" ? null : isValidUrl(normalized);
 const [serverResult, setServerResult] = useState(null);
 const [loading, setLoading] = useState(false);
+const latestRequestId = useRef(0);
 
 
 useEffect(() => {
- if (!url.trim() || valid === false) {
-   setServerResult(null);
-   return;
- }
+  // Invalidate any in-flight request: bumping the counter means its
+  // response will be ignored when it eventually resolves.
+  latestRequestId.current += 1;
+  const myRequestId = latestRequestId.current;
 
+  // Clear the previous result and loading state immediately on every
+  // input change so a stale result is never shown for the new URL.
+  setServerResult(null);
+  setLoading(false);
 
- const handler = setTimeout(() => {
-   const normalized = normalizeUrl(url);
+  if (!url.trim() || valid === false) {
+    return;
+  }
 
+  const handler = setTimeout(() => {
+    setLoading(true);
+    mockCheckUrlOnServer(normalizeUrl(url)).then((res) => {
+      // Only apply the result if this is still the most recent request.
+      if (myRequestId !== latestRequestId.current) return;
+      setServerResult(res);
+      setLoading(false);
+    });
+  }, 500);
 
-   setLoading(true);
-
-
-   mockCheckUrlOnServer(normalized).then((res) => {
-     setServerResult(res);
-     setLoading(false);
-   });
- }, 500); // debounce delay
-
-
- return () => clearTimeout(handler);
+  return () => clearTimeout(handler);
 }, [url, valid]);
 
 
